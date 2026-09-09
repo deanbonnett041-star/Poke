@@ -42,7 +42,11 @@ object GradingEngine {
         if (quality.isBlurry) reasons.add("Photo looks a little soft/out of focus — hold steady and let the camera focus before capturing.")
         if (quality.isTooDark) reasons.add("Photo is quite dark — use even, diffuse lighting.")
         if (quality.isTooBright) reasons.add("Photo is overexposed — reduce direct light/flash.")
-        if (surface.lowConfidence) reasons.add("Glare detected on the card surface — angle the light source to avoid reflections.")
+        if (surface.texturedSurface) {
+            reasons.add("This looks like a holographic, foil, or textured surface — surface condition is the hardest category to read from a photo on cards like this.")
+        } else if (surface.lowConfidence) {
+            reasons.add("Glare detected on the card surface — angle the light source to avoid reflections.")
+        }
 
         val level = when {
             reasons.size >= 2 -> Confidence.Level.LOW

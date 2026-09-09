@@ -6,18 +6,33 @@ data class SurfaceResult(
     val glareFraction: Double,
     val scratchFraction: Double,
     val grade: Double,
-    val lowConfidence: Boolean
+    val lowConfidence: Boolean,
+    val texturedSurface: Boolean
 )
 
 /**
  * Looks at the inner card face (outside the printed border) for two
  * things a phone photo can plausibly pick up: blown-out glare hotspots,
- * and long thin high-gradient streaks consistent with a surface scratch.
+ * and high-contrast streaks consistent with a surface scratch.
  * Surface is the least reliable of the four categories from a photo alone
  * (real graders use raking light and magnification), so this also flags
- * lowConfidence when glare is high enough that the read is unreliable.
+ * lowConfidence when glare is high enough -- or the surface looks
+ * inherently textured (see below) -- that the read is unreliable.
  */
 object SurfaceAnalyzer {
+
+    /**
+     * Above this fraction of the sampled grid, a high-contrast pattern
+     * stops looking like "a scratch" (a real defect is a thin, localized
+     * line -- even a bad one only ever covers a small fraction of the
+     * card face) and starts looking like "this card's surface is just
+     * like that everywhere" -- holographic foil, glitter, textured/
+     * embossed print, and similar finishes all produce widespread fine
+     * high-contrast texture that trips the same per-pixel signal a real
+     * scratch does. Treating widespread texture as heavy scratch damage
+     * was capping otherwise-strong grades on ordinary holo cards.
+     */
+    private const val TEXTURED_SURFACE_THRESHOLD = 0.12
 
     fun analyze(image: PixelImage, innerRect: Rect): SurfaceResult {
         val maxDim = 260
@@ -30,7 +45,7 @@ object SurfaceAnalyzer {
         val gridW = xs.count()
         val gridH = ys.count()
         if (gridW < 3 || gridH < 3) {
-            return SurfaceResult(0.0, 0.0, 8.0, lowConfidence = true)
+            return SurfaceResult(0.0, 0.0, 8.0, lowConfidence = true, texturedSurface = false)
         }
         val luma = IntArray(gridW * gridH)
         var idx = 0
@@ -63,21 +78,29 @@ object SurfaceAnalyzer {
                 if (laplacian > 90) streakHits++
             }
         }
-        val scratchFraction = if (samples == 0) 0.0 else streakHits.toDouble() / samples
+        val streakFraction = if (samples == 0) 0.0 else streakHits.toDouble() / samples
+        val texturedSurface = streakFraction > TEXTURED_SURFACE_THRESHOLD
 
         val glarePenalty = (glareFraction * 30.0).coerceAtMost(6.0)
-        // Even a thin scratch is a real defect regardless of how little of
-        // the total surface area it covers, so weight by raw hit count
-        // (relative to a fixed reference grid size) rather than by the
-        // fraction of the whole surface it occupies.
-        val scratchPenalty = (streakHits / 16.0).coerceAtMost(7.0)
+        // A thin, localized scratch is a real defect regardless of how
+        // little of the total surface area it covers, so it's weighted by
+        // raw hit count rather than the fraction of the whole surface --
+        // but once the pattern is widespread enough to look like texture
+        // rather than damage, the penalty is capped much lower instead of
+        // continuing to scale with hit count.
+        val scratchPenalty = if (texturedSurface) {
+            (streakHits / 16.0).coerceAtMost(2.0)
+        } else {
+            (streakHits / 16.0).coerceAtMost(7.0)
+        }
         val grade = (10.0 - glarePenalty - scratchPenalty).coerceIn(0.0, 10.0)
 
         return SurfaceResult(
             glareFraction = glareFraction,
-            scratchFraction = scratchFraction,
+            scratchFraction = streakFraction,
             grade = roundToHalf(grade),
-            lowConfidence = glareFraction > 0.15
+            lowConfidence = glareFraction > 0.15 || texturedSurface,
+            texturedSurface = texturedSurface
         )
     }
 
