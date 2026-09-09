@@ -53,8 +53,9 @@ desktop JVM independently of the Android toolchain.
   company.
 - History (Room database) of previously graded cards, stored locally.
 - Tips screen for getting a more accurate read (lighting, glare, alignment).
-- Gallery import (e.g. a photo saved from an eBay listing), with a
-  pinch/pan crop step before grading.
+- Gallery import (e.g. a photo saved from an eBay listing), auto-filled
+  edge-to-edge into the card frame with a drag-to-reposition step before
+  grading.
 - A "Grade a Card" home-screen widget that jumps straight into the capture
   flow — a widget can't embed a live camera itself, but skipping the app's
   home screen is exactly the kind of tap saved that matters at a card show.

@@ -4,8 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,16 +40,21 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
 private const val CARD_ASPECT = 2.5f / 3.5f // width / height
-private const val MIN_USER_SCALE = 1f
-private const val MAX_USER_SCALE = 6f
 
 /**
- * Lets the user pan/zoom an imported photo (e.g. saved from an eBay
- * listing) inside a fixed card-shaped frame before it's cropped, so a
- * photo that isn't already tightly cropped to the card gets fed into
- * grading the same way a guided camera capture is: with the card filling
- * the frame. Confirming produces a new bitmap containing only what's
- * visible inside the frame, at a fixed output resolution.
+ * Lets the user preview an imported photo (e.g. saved from an eBay
+ * listing) auto-filled edge-to-edge into a fixed card-shaped frame before
+ * it's cropped, so a photo that isn't already tightly cropped to the card
+ * gets fed into grading the same way a guided camera capture is: with the
+ * card filling the frame. A single-finger drag lets them nudge the crop if
+ * the auto-centered fit isn't quite right. Confirming produces a new
+ * bitmap containing only what's visible inside the frame, at a fixed
+ * output resolution.
+ *
+ * Pinch-to-zoom used to live here too, but proved unreliable across
+ * devices in practice; auto-fill plus a plain single-finger drag (a much
+ * simpler, well-tested gesture) is more robust and needs no interaction
+ * at all for the common case of an already-reasonably-framed photo.
  */
 @Composable
 fun ImportAdjustScreen(
@@ -60,7 +64,6 @@ fun ImportAdjustScreen(
     onCancel: () -> Unit
 ) {
     var frameSizePx by remember { mutableStateOf(IntSize.Zero) }
-    var userScale by remember { mutableStateOf(MIN_USER_SCALE) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
@@ -68,7 +71,7 @@ fun ImportAdjustScreen(
         Column(modifier = Modifier.padding(20.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             Text(
-                "Pinch to zoom and drag to position the card inside the frame.",
+                "The photo auto-fills the frame. Drag to reposition if the card isn't centered.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
             )
@@ -78,44 +81,12 @@ fun ImportAdjustScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxSize()
-                // Gesture detection covers the whole available area, not just
-                // the visual frame below: a real two-finger pinch usually
-                // spreads wider than a ~300dp box, so if only the frame were
-                // listening, one finger would often land outside it and the
-                // gesture would degrade to a single-finger pan.
-                //
-                // Tracked manually (rather than via detectTransformGestures)
-                // so pinch distance is computed explicitly frame-by-frame --
-                // no dependency on a helper's internal touch-slop/centroid
-                // handling that can behave inconsistently across devices.
+                // Gesture detection covers the whole available area, not
+                // just the visual frame below, so a drag started anywhere
+                // nearby still repositions the photo.
                 .pointerInput(source) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
-                        var previousPinchDistance = 0f
-                        var wasPinching = false
-                        do {
-                            val event = awaitPointerEvent()
-                            val pointers = event.changes.filter { it.pressed }
-
-                            if (pointers.size >= 2) {
-                                val distance = (pointers[0].position - pointers[1].position).getDistance()
-                                if (wasPinching && previousPinchDistance > 0f) {
-                                    val zoomFactor = distance / previousPinchDistance
-                                    userScale = (userScale * zoomFactor).coerceIn(MIN_USER_SCALE, MAX_USER_SCALE)
-                                }
-                                previousPinchDistance = distance
-                                wasPinching = true
-                                pointers.forEach { it.consume() }
-                            } else if (pointers.size == 1) {
-                                wasPinching = false
-                                val change = pointers[0]
-                                val drag = change.position - change.previousPosition
-                                if (drag != Offset.Zero) {
-                                    offset = clampOffset(offset + drag, frameSizePx, source, userScale)
-                                    change.consume()
-                                }
-                            }
-                        } while (pointers.isNotEmpty())
+                    detectDragGestures { _, dragAmount ->
+                        offset = clampOffset(offset + dragAmount, frameSizePx, source)
                     }
                 },
             contentAlignment = Alignment.Center
@@ -131,8 +102,8 @@ fun ImportAdjustScreen(
                     .background(Color.Black)
             ) {
                 if (frameSizePx.width > 0 && frameSizePx.height > 0) {
-                    val baseScale = coverScale(frameSizePx, source)
-                    val totalScale = baseScale * userScale
+                    // Auto-fills the frame edge-to-edge, like ContentScale.Crop.
+                    val totalScale = coverScale(frameSizePx, source)
                     val dispWidthPx = source.width * totalScale
                     val dispHeightPx = source.height * totalScale
                     val dispWidthDp = with(density) { dispWidthPx.toDp() }
@@ -175,7 +146,7 @@ fun ImportAdjustScreen(
             }
             Button(
                 onClick = {
-                    val cropped = cropToFrame(source, frameSizePx, userScale, offset)
+                    val cropped = cropToFrame(source, frameSizePx, offset)
                     onConfirm(cropped)
                 },
                 modifier = Modifier.weight(1f)
@@ -186,7 +157,7 @@ fun ImportAdjustScreen(
     }
 }
 
-/** Scale at which the bitmap fully covers the frame (like ContentScale.Crop), before user zoom. */
+/** Scale at which the bitmap fully covers the frame (like ContentScale.Crop). */
 private fun coverScale(frame: IntSize, bitmap: Bitmap): Float {
     if (frame.width == 0 || frame.height == 0) return 1f
     val scaleX = frame.width.toFloat() / bitmap.width
@@ -194,10 +165,10 @@ private fun coverScale(frame: IntSize, bitmap: Bitmap): Float {
     return maxOf(scaleX, scaleY)
 }
 
-/** Keeps the frame fully covered by the image at the given scale. */
-private fun clampOffset(raw: Offset, frame: IntSize, bitmap: Bitmap, userScale: Float): Offset {
+/** Keeps the frame fully covered by the image at the auto-fill scale. */
+private fun clampOffset(raw: Offset, frame: IntSize, bitmap: Bitmap): Offset {
     if (frame.width == 0 || frame.height == 0) return Offset.Zero
-    val totalScale = coverScale(frame, bitmap) * userScale
+    val totalScale = coverScale(frame, bitmap)
     val dispWidth = bitmap.width * totalScale
     val dispHeight = bitmap.height * totalScale
     val maxX = ((dispWidth - frame.width) / 2f).coerceAtLeast(0f)
@@ -206,10 +177,10 @@ private fun clampOffset(raw: Offset, frame: IntSize, bitmap: Bitmap, userScale: 
 }
 
 /** Renders exactly what's visible inside the frame into a new, fixed-resolution bitmap. */
-private fun cropToFrame(source: Bitmap, frame: IntSize, userScale: Float, offset: Offset): Bitmap {
+private fun cropToFrame(source: Bitmap, frame: IntSize, offset: Offset): Bitmap {
     if (frame.width == 0 || frame.height == 0) return source
 
-    val totalScale = coverScale(frame, source) * userScale
+    val totalScale = coverScale(frame, source)
     val dispWidth = source.width * totalScale
     val dispHeight = source.height * totalScale
     // Top-left of the displayed (scaled) image, relative to the frame's top-left.
