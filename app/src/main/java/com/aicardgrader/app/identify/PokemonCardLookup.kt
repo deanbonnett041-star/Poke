@@ -42,14 +42,23 @@ data class CardIdentification(
  * download), so it's always a best-effort enrichment shown only when it
  * succeeds -- grading itself never depends on it or waits long for it.
  */
+/**
+ * Result of a lookup attempt. [diagnostic] is null on success (or when
+ * there was no name to search at all); when [card] is null it names why
+ * -- an HTTP status, an exception type/message, or "no card matched" --
+ * so a real failure reason is visible instead of every kind of failure
+ * collapsing into the same silent "nothing found".
+ */
+data class LookupOutcome(val card: CardIdentification?, val diagnostic: String?)
+
 object PokemonCardLookup {
 
     private const val BASE_URL = "https://api.pokemontcg.io/v2/cards"
     private const val TIMEOUT_MS = 6000
 
-    suspend fun lookup(nameGuess: String?, numberGuess: String?): CardIdentification? {
+    suspend fun lookup(nameGuess: String?, numberGuess: String?): LookupOutcome {
         val name = nameGuess?.trim().orEmpty()
-        if (name.length < 2) return null
+        if (name.length < 2) return LookupOutcome(null, null)
 
         return withContext(Dispatchers.IO) {
             var connection: HttpURLConnection? = null
@@ -61,11 +70,15 @@ object PokemonCardLookup {
                     readTimeout = TIMEOUT_MS
                     setRequestProperty("Accept", "application/json")
                 }
-                if (connection.responseCode != HttpURLConnection.HTTP_OK) return@withContext null
+                val code = connection.responseCode
+                if (code != HttpURLConnection.HTTP_OK) {
+                    return@withContext LookupOutcome(null, "server returned HTTP $code")
+                }
                 val body = connection.inputStream.bufferedReader().use { it.readText() }
-                parseFirstCard(body)
-            } catch (_: Exception) {
-                null
+                val card = parseFirstCard(body)
+                if (card == null) LookupOutcome(null, "no card matched") else LookupOutcome(card, null)
+            } catch (e: Exception) {
+                LookupOutcome(null, "${e.javaClass.simpleName}: ${e.message}")
             } finally {
                 connection?.disconnect()
             }

@@ -14,6 +14,7 @@ import com.aicardgrader.app.grading.GradingResult
 import com.aicardgrader.app.grading.standardCardGuideRect
 import com.aicardgrader.app.grading.toPixelImage
 import com.aicardgrader.app.identify.CardIdentification
+import com.aicardgrader.app.identify.LookupOutcome
 import com.aicardgrader.app.identify.PokemonCardLookup
 import com.aicardgrader.app.ocr.CardTextRecognizer
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,8 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var identifiedCard by mutableStateOf<CardIdentification?>(null)
         private set
+    var lookupDiagnostic by mutableStateOf<String?>(null)
+        private set
 
     val history: StateFlow<List<CardRecord>> = repository.observeHistory()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -62,6 +65,7 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
         lastSavedRecordId = null
         suggestedCardName = null
         identifiedCard = null
+        lookupDiagnostic = null
     }
 
     fun runGrading(onDone: () -> Unit) {
@@ -81,18 +85,20 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
                 val guess = runCatching { CardTextRecognizer.recognizeCard(front) }.getOrNull()
                 val nameGuess = guess?.name
                 val numberGuess = guess?.number
-                val card = if (!nameGuess.isNullOrBlank()) {
-                    runCatching { PokemonCardLookup.lookup(nameGuess, numberGuess) }.getOrNull()
+                val outcome = if (!nameGuess.isNullOrBlank()) {
+                    runCatching { PokemonCardLookup.lookup(nameGuess, numberGuess) }
+                        .getOrElse { LookupOutcome(null, "${it.javaClass.simpleName}: ${it.message}") }
                 } else {
-                    null
+                    LookupOutcome(null, null)
                 }
-                guess to card
+                Triple(guess, outcome.card, outcome.diagnostic)
             }
 
             currentResult = gradingDeferred.await()
-            val (guess, card) = identificationDeferred.await()
+            val (guess, card, diagnostic) = identificationDeferred.await()
             suggestedCardName = guess?.name
             identifiedCard = card
+            lookupDiagnostic = diagnostic
             isGrading = false
             onDone()
         }

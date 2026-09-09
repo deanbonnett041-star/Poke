@@ -54,6 +54,7 @@ fun ResultsScreen(
     val back = viewModel.backBitmap
     val suggestedName = viewModel.suggestedCardName
     val identifiedCard = viewModel.identifiedCard
+    val lookupDiagnostic = viewModel.lookupDiagnostic
     val prefillName = identifiedCard?.name ?: suggestedName
     var cardName by remember(prefillName) { mutableStateOf(prefillName ?: "") }
     var saved by remember { mutableStateOf(false) }
@@ -190,11 +191,17 @@ fun ResultsScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
-                            "Searched online for \"$suggestedName\" — no match found, or no internet " +
-                                "connection at the time. Pricing needs a successful match.",
+                            "Searched online for \"$suggestedName\" — no match. Pricing needs a successful match.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
+                        if (!lookupDiagnostic.isNullOrBlank()) {
+                            Text(
+                                "Reason: $lookupDiagnostic",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
                     }
                 }
             }
