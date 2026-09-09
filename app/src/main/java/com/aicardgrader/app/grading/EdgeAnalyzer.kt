@@ -13,9 +13,20 @@ data class EdgeResult(val sides: List<EdgeSideResult>, val grade: Double)
  */
 object EdgeAnalyzer {
 
+    // The detected card rect is rarely pixel-perfect (more so from a real
+    // photo than a synthetic one), so sampling "the edge" exactly at the
+    // rect boundary risks landing just outside the true card and reading
+    // background instead -- silently missing every real defect. Sampling a
+    // couple of pixels inward keeps us safely on the card while still well
+    // within the zone where whitening/nicks actually show.
+    private const val EDGE_SAMPLE_MARGIN = 2
+
     fun analyze(image: PixelImage, cardRect: Rect, borderThicknessPx: Int): EdgeResult {
         val cornerSkip = 0.10 // fraction of each edge length reserved for corners
-        val refOffset = (borderThicknessPx / 3).coerceAtLeast(3)
+        // Reference point sits well past where a nick/whitening defect
+        // would plausibly extend, so it isn't contaminated by the very
+        // defect the edge sample is trying to detect.
+        val refOffset = (borderThicknessPx * 0.65).roundToInt().coerceAtLeast(EDGE_SAMPLE_MARGIN + 5)
         val sides = listOf(
             sampleEdge(image, "Top", horizontal = true, fixed = cardRect.top, along = cardRect.left..cardRect.right, inward = 1, cornerSkip, refOffset),
             sampleEdge(image, "Bottom", horizontal = true, fixed = cardRect.bottom, along = cardRect.left..cardRect.right, inward = -1, cornerSkip, refOffset),
@@ -46,14 +57,15 @@ object EdgeAnalyzer {
             val edgeSat: Float
             val refLuma: Int
             val refSat: Float
+            val edgePos = fixed + inward * EDGE_SAMPLE_MARGIN
             if (horizontal) {
-                edgeLuma = PixelImage.luma(image.at(p, fixed))
-                edgeSat = PixelImage.saturation(image.at(p, fixed))
+                edgeLuma = PixelImage.luma(image.at(p, edgePos))
+                edgeSat = PixelImage.saturation(image.at(p, edgePos))
                 refLuma = PixelImage.luma(image.at(p, fixed + inward * refOffset))
                 refSat = PixelImage.saturation(image.at(p, fixed + inward * refOffset))
             } else {
-                edgeLuma = PixelImage.luma(image.at(fixed, p))
-                edgeSat = PixelImage.saturation(image.at(fixed, p))
+                edgeLuma = PixelImage.luma(image.at(edgePos, p))
+                edgeSat = PixelImage.saturation(image.at(edgePos, p))
                 refLuma = PixelImage.luma(image.at(fixed + inward * refOffset, p))
                 refSat = PixelImage.saturation(image.at(fixed + inward * refOffset, p))
             }

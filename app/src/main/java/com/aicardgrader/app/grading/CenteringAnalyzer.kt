@@ -69,25 +69,42 @@ object CenteringAnalyzer {
 
     /**
      * Walks inward from [from] towards [to] along the fixed cross-axis
-     * coordinate [cross], looking for the first strong, sustained
-     * brightness/color change (the border -> inner-panel transition).
-     * Returns distance travelled from [from].
+     * coordinate [cross], looking for a strong, sustained brightness/color
+     * change (the border -> inner-panel transition). Returns distance
+     * travelled from [from].
+     *
+     * The card-edge detection this rect comes from is never pixel-perfect
+     * (real photos especially), so [from] can sit a few pixels outside or
+     * inside the card's true physical edge. If the baseline color were
+     * sampled right at [from], being even 1px outside the true edge would
+     * make the baseline "background", and the very next step -- the real
+     * background -> border jump -- would be mistaken for the border ->
+     * art transition, collapsing the measured border to ~1px. Skipping a
+     * small margin before sampling the baseline, and requiring the jump to
+     * hold for two consecutive steps (not just one noisy pixel), avoids
+     * that failure mode.
      */
     private fun scanIn(
         image: PixelImage, from: Int, to: Int, cross: Int, horizontal: Boolean
     ): Int {
         val dir = if (to >= from) 1 else -1
         val steps = abs(to - from)
-        if (steps < 2) return steps
-        var prevLuma = if (horizontal) PixelImage.luma(image.at(from, cross)) else PixelImage.luma(image.at(cross, from))
-        var i = 1
-        while (i < steps) {
+        val skip = 4
+        if (steps <= skip + 2) return steps
+
+        fun lumaAt(i: Int): Int {
             val pos = from + dir * i
-            val luma = if (horizontal) PixelImage.luma(image.at(pos, cross)) else PixelImage.luma(image.at(cross, pos))
-            if (abs(luma - prevLuma) > 26) {
+            return if (horizontal) PixelImage.luma(image.at(pos, cross)) else PixelImage.luma(image.at(cross, pos))
+        }
+
+        val baseline = lumaAt(skip)
+        var i = skip + 1
+        while (i < steps - 1) {
+            val luma = lumaAt(i)
+            val nextLuma = lumaAt(i + 1)
+            if (abs(luma - baseline) > 26 && abs(nextLuma - baseline) > 22) {
                 return i
             }
-            prevLuma = luma
             i++
         }
         return steps

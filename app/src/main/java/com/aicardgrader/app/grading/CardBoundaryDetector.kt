@@ -6,26 +6,29 @@ import kotlin.math.roundToInt
 /**
  * Snaps the on-screen capture guide (the rectangle the user was asked to
  * align the card to) onto the card's real physical edge, by searching for
- * the strongest brightness-gradient line near each guide edge. This is a
- * deliberately lightweight alternative to full contour/quad detection: it
- * relies on the user roughly aligning the card to the guide (enforced by
- * the capture UI) and only corrects small (+/- searchFraction) offsets.
+ * the column/row with the strongest *aggregate* brightness-gradient across
+ * many sampled lines near each guide edge (a projection-profile edge
+ * detector). Aggregating gradient strength across all sample lines, rather
+ * than taking each line's individual best point and majority-voting, makes
+ * this far more tolerant of a card that isn't placed exactly on the guide,
+ * and of noisy/textured backgrounds — a single stray strong edge on one
+ * scan line can no longer hijack the result.
  */
 object CardBoundaryDetector {
 
     fun snap(
         image: PixelImage,
         guide: Rect,
-        searchFraction: Double = 0.05,
-        samples: Int = 24
+        searchFraction: Double = 0.14,
+        samples: Int = 40
     ): Rect {
-        val searchX = (image.width * searchFraction).roundToInt().coerceAtLeast(4)
-        val searchY = (image.height * searchFraction).roundToInt().coerceAtLeast(4)
+        val searchX = (image.width * searchFraction).roundToInt().coerceAtLeast(6)
+        val searchY = (image.height * searchFraction).roundToInt().coerceAtLeast(6)
 
-        val left = snapVerticalEdge(image, guide.left, guide.top, guide.bottom, searchX, samples, towardsInterior = 1)
-        val right = snapVerticalEdge(image, guide.right, guide.top, guide.bottom, searchX, samples, towardsInterior = -1)
-        val top = snapHorizontalEdge(image, guide.top, guide.left, guide.right, searchY, samples, towardsInterior = 1)
-        val bottom = snapHorizontalEdge(image, guide.bottom, guide.left, guide.right, searchY, samples, towardsInterior = -1)
+        val left = snapVerticalEdge(image, guide.left, guide.top, guide.bottom, searchX, samples)
+        val right = snapVerticalEdge(image, guide.right, guide.top, guide.bottom, searchX, samples)
+        val top = snapHorizontalEdge(image, guide.top, guide.left, guide.right, searchY, samples)
+        val bottom = snapHorizontalEdge(image, guide.bottom, guide.left, guide.right, searchY, samples)
 
         val l = left.coerceIn(0, image.width - 2)
         val r = right.coerceIn(l + 1, image.width - 1)
@@ -34,55 +37,51 @@ object CardBoundaryDetector {
         return Rect(l, t, r, b)
     }
 
-    /** Finds the column with the strongest horizontal gradient near [guideX]. */
+    /** Finds the column with the strongest aggregate horizontal gradient near [guideX]. */
     private fun snapVerticalEdge(
-        image: PixelImage, guideX: Int, yStart: Int, yEnd: Int, search: Int, samples: Int, towardsInterior: Int
+        image: PixelImage, guideX: Int, yStart: Int, yEnd: Int, search: Int, samples: Int
     ): Int {
-        val votes = HashMap<Int, Int>()
+        val xMin = (guideX - search).coerceAtLeast(1)
+        val xMax = (guideX + search).coerceAtMost(image.width - 2)
+        if (xMin >= xMax) return guideX
+
+        val scores = IntArray(xMax - xMin + 1)
         val step = ((yEnd - yStart).coerceAtLeast(1)) / samples.coerceAtLeast(1)
         var y = yStart
         while (y < yEnd) {
-            var bestX = guideX
-            var bestGrad = -1
-            var x = (guideX - search).coerceAtLeast(1)
-            val xMax = (guideX + search).coerceAtMost(image.width - 2)
+            var x = xMin
             while (x <= xMax) {
                 val g = abs(PixelImage.luma(image.at(x + 1, y)) - PixelImage.luma(image.at(x - 1, y)))
-                if (g > bestGrad) {
-                    bestGrad = g
-                    bestX = x
-                }
+                scores[x - xMin] += g
                 x++
             }
-            if (bestGrad > 12) votes[bestX] = (votes[bestX] ?: 0) + 1
             y += step.coerceAtLeast(1)
         }
-        return votes.maxByOrNull { it.value }?.key ?: guideX
+        val bestIndex = scores.indices.maxByOrNull { scores[it] } ?: return guideX
+        return xMin + bestIndex
     }
 
-    /** Finds the row with the strongest vertical gradient near [guideY]. */
+    /** Finds the row with the strongest aggregate vertical gradient near [guideY]. */
     private fun snapHorizontalEdge(
-        image: PixelImage, guideY: Int, xStart: Int, xEnd: Int, search: Int, samples: Int, towardsInterior: Int
+        image: PixelImage, guideY: Int, xStart: Int, xEnd: Int, search: Int, samples: Int
     ): Int {
-        val votes = HashMap<Int, Int>()
+        val yMin = (guideY - search).coerceAtLeast(1)
+        val yMax = (guideY + search).coerceAtMost(image.height - 2)
+        if (yMin >= yMax) return guideY
+
+        val scores = IntArray(yMax - yMin + 1)
         val step = ((xEnd - xStart).coerceAtLeast(1)) / samples.coerceAtLeast(1)
         var x = xStart
         while (x < xEnd) {
-            var bestY = guideY
-            var bestGrad = -1
-            var y = (guideY - search).coerceAtLeast(1)
-            val yMax = (guideY + search).coerceAtMost(image.height - 2)
+            var y = yMin
             while (y <= yMax) {
                 val g = abs(PixelImage.luma(image.at(x, y + 1)) - PixelImage.luma(image.at(x, y - 1)))
-                if (g > bestGrad) {
-                    bestGrad = g
-                    bestY = y
-                }
+                scores[y - yMin] += g
                 y++
             }
-            if (bestGrad > 12) votes[bestY] = (votes[bestY] ?: 0) + 1
             x += step.coerceAtLeast(1)
         }
-        return votes.maxByOrNull { it.value }?.key ?: guideY
+        val bestIndex = scores.indices.maxByOrNull { scores[it] } ?: return guideY
+        return yMin + bestIndex
     }
 }
