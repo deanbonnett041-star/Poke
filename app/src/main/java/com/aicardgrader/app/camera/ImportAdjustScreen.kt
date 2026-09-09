@@ -76,7 +76,19 @@ fun ImportAdjustScreen(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxSize(),
+                .fillMaxSize()
+                // Gesture detection covers the whole available area, not just
+                // the visual frame below: a real two-finger pinch usually
+                // spreads wider than a ~300dp box, so if only the frame were
+                // listening, one finger would often land outside it and the
+                // gesture would degrade to a single-finger pan.
+                .pointerInput(source) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        val newScale = (userScale * zoom).coerceIn(MIN_USER_SCALE, MAX_USER_SCALE)
+                        userScale = newScale
+                        offset = clampOffset(offset + pan, frameSizePx, source, newScale)
+                    }
+                },
             contentAlignment = Alignment.Center
         ) {
             val frameWidthDp = 300.dp
@@ -88,13 +100,6 @@ fun ImportAdjustScreen(
                     .onSizeChanged { frameSizePx = it }
                     .clipToBounds()
                     .background(Color.Black)
-                    .pointerInput(source) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                            val newScale = (userScale * zoom).coerceIn(MIN_USER_SCALE, MAX_USER_SCALE)
-                            userScale = newScale
-                            offset = clampOffset(offset + pan, frameSizePx, source, newScale)
-                        }
-                    }
             ) {
                 if (frameSizePx.width > 0 && frameSizePx.height > 0) {
                     val baseScale = coverScale(frameSizePx, source)
