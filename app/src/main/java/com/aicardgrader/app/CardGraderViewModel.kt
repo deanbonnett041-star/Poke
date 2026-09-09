@@ -13,6 +13,8 @@ import com.aicardgrader.app.grading.GradingEngine
 import com.aicardgrader.app.grading.GradingResult
 import com.aicardgrader.app.grading.standardCardGuideRect
 import com.aicardgrader.app.grading.toPixelImage
+import com.aicardgrader.app.identify.CardIdentification
+import com.aicardgrader.app.identify.PokemonCardLookup
 import com.aicardgrader.app.ocr.CardTextRecognizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -37,6 +39,8 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var suggestedCardName by mutableStateOf<String?>(null)
         private set
+    var identifiedCard by mutableStateOf<CardIdentification?>(null)
+        private set
 
     val history: StateFlow<List<CardRecord>> = repository.observeHistory()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -57,22 +61,38 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
         currentResult = null
         lastSavedRecordId = null
         suggestedCardName = null
+        identifiedCard = null
     }
 
     fun runGrading(onDone: () -> Unit) {
         val front = frontBitmap ?: return
         isGrading = true
         viewModelScope.launch {
-            val gradingResult = async(Dispatchers.Default) {
+            val gradingDeferred = async(Dispatchers.Default) {
                 val pixelImage = front.toPixelImage()
                 val guide = standardCardGuideRect(pixelImage.width, pixelImage.height)
                 GradingEngine.grade(pixelImage, guide)
             }
-            val nameSuggestion = async(Dispatchers.Default) {
-                runCatching { CardTextRecognizer.suggestCardName(front) }.getOrNull()
+            // OCR runs fully on-device; the set/card lookup that follows it
+            // is a live network call and best-effort only -- if it fails
+            // (no connection, no match) the name guess from OCR still
+            // stands on its own, same as before this existed.
+            val identificationDeferred = async(Dispatchers.Default) {
+                val guess = runCatching { CardTextRecognizer.recognizeCard(front) }.getOrNull()
+                val nameGuess = guess?.name
+                val numberGuess = guess?.number
+                val card = if (!nameGuess.isNullOrBlank()) {
+                    runCatching { PokemonCardLookup.lookup(nameGuess, numberGuess) }.getOrNull()
+                } else {
+                    null
+                }
+                guess to card
             }
-            currentResult = gradingResult.await()
-            suggestedCardName = nameSuggestion.await()
+
+            currentResult = gradingDeferred.await()
+            val (guess, card) = identificationDeferred.await()
+            suggestedCardName = guess?.name
+            identifiedCard = card
             isGrading = false
             onDone()
         }

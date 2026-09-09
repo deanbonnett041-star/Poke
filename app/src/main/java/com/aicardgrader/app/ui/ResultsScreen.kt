@@ -46,7 +46,9 @@ fun ResultsScreen(
     val front = viewModel.frontBitmap
     val back = viewModel.backBitmap
     val suggestedName = viewModel.suggestedCardName
-    var cardName by remember(suggestedName) { mutableStateOf(suggestedName ?: "") }
+    val identifiedCard = viewModel.identifiedCard
+    val prefillName = identifiedCard?.name ?: suggestedName
+    var cardName by remember(prefillName) { mutableStateOf(prefillName ?: "") }
     var saved by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -80,6 +82,53 @@ fun ResultsScreen(
                             .height(180.dp)
                             .clip(RoundedCornerShape(12.dp))
                     )
+                }
+            }
+        }
+
+        if (identifiedCard != null) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            "Identified card",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(identifiedCard.name, style = MaterialTheme.typography.titleMedium)
+                        val setLine = buildString {
+                            if (identifiedCard.setName.isNotBlank()) append(identifiedCard.setName)
+                            if (identifiedCard.setSeries.isNotBlank() && identifiedCard.setSeries != identifiedCard.setName) {
+                                if (isNotEmpty()) append(" — ")
+                                append(identifiedCard.setSeries)
+                            }
+                        }
+                        if (setLine.isNotBlank()) {
+                            Text(setLine, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        val numberLine = buildString {
+                            if (identifiedCard.number.isNotBlank()) {
+                                append(identifiedCard.number)
+                                if (identifiedCard.printedTotal != null) append("/${identifiedCard.printedTotal}")
+                            }
+                            identifiedCard.rarity?.let {
+                                if (isNotEmpty()) append(" · ")
+                                append(it)
+                            }
+                        }
+                        if (numberLine.isNotBlank()) {
+                            Text(
+                                numberLine,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                        }
+                        Text(
+                            "Matched from a live lookup — double-check against the physical card.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
         }
@@ -130,9 +179,14 @@ fun ResultsScreen(
                     label = { Text("Name this card (optional)") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (!suggestedName.isNullOrBlank()) {
+                if (!prefillName.isNullOrBlank()) {
+                    val hint = if (identifiedCard != null) {
+                        "From the card lookup above — edit if it's not quite right."
+                    } else {
+                        "Detected on-device from the photo — edit if it's not quite right."
+                    }
                     Text(
-                        "Detected on-device from the photo — edit if it's not quite right.",
+                        hint,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                     )

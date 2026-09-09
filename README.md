@@ -34,10 +34,16 @@ rough, photo-based estimate, never as an official or certified grade.
 4. Everything runs locally on the device — no photo or network upload is
    required to produce a grade.
 5. `CardTextRecognizer` (in `ocr/`) also runs on-device text recognition
-   (Google ML Kit) over the front photo and suggests a card name, always
-   shown as an editable pre-filled field — never treated as a confirmed
-   identification. The recognition model downloads once over the network
-   on first use; after that it runs fully offline like the rest of the app.
+   (Google ML Kit) over the front photo and suggests a card name and set
+   number, always shown as an editable pre-filled field — never treated as
+   a confirmed identification. The recognition model downloads once over
+   the network on first use; after that it runs fully offline like the
+   rest of the app.
+6. `PokemonCardLookup` (in `identify/`) takes that OCR guess and queries
+   the public Pokemon TCG API (`api.pokemontcg.io`) to identify the actual
+   card and set. Unlike everything above, this is a live network call
+   every time -- it's shown only when it succeeds, and grading itself
+   never depends on or waits on it.
 
 The whole grading engine (`app/src/main/java/com/aicardgrader/app/grading/`)
 is plain Kotlin with no Android dependencies, so it can be unit-tested on a
@@ -49,6 +55,9 @@ desktop JVM independently of the Android toolchain.
 - On-device grading engine — works fully offline.
 - On-device OCR name suggestion for the graded card (editable, never
   auto-trusted).
+- Card/set identification via the public Pokemon TCG API (name, set,
+  series, card number, rarity) — the one feature here that needs a live
+  network connection.
 - Results screen with a per-category breakdown and a badge per grading
   company.
 - History (Room database) of previously graded cards, stored locally.

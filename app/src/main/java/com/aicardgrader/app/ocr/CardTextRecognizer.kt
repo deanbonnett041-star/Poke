@@ -10,14 +10,18 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
+/** Best-effort text read off a card photo: a name guess and a set-number guess (e.g. "14/132"). */
+data class CardTextGuess(val name: String?, val number: String?)
+
 /**
- * Suggests a card name by running on-device OCR (Google ML Kit) over the
- * front photo and picking out the largest text near the top of the card --
- * where a Pokémon card's name is printed. This is a best-effort suggestion,
- * always shown as an editable, pre-filled text field rather than treated as
- * a confirmed identification: OCR on a phone photo of a small-font, often
- * stylized card name is unreliable enough that it should never be silently
- * trusted.
+ * Reads a card name and set-relative number by running on-device OCR
+ * (Google ML Kit) over the front photo: the name from the largest text
+ * near the top of the card, the number from a "x/y" pattern anywhere on
+ * it (almost always printed along the bottom). Both are best-effort
+ * suggestions, always shown as editable rather than treated as a
+ * confirmed identification: OCR on a phone photo of small, often
+ * stylized card text is unreliable enough that it should never be
+ * silently trusted.
  *
  * The recognition model downloads once, on first use, over the network;
  * after that it runs fully on-device with no further network access.
@@ -26,10 +30,13 @@ object CardTextRecognizer {
 
     private val recognizer by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
-    suspend fun suggestCardName(front: Bitmap): String? {
+    suspend fun recognizeCard(front: Bitmap): CardTextGuess {
         val cropped = cropToGuide(front) ?: front
-        val visionText = runCatching { recognize(cropped) }.getOrNull() ?: return null
-        return pickLikelyName(visionText, cropped.height)
+        val visionText = runCatching { recognize(cropped) }.getOrNull() ?: return CardTextGuess(null, null)
+        return CardTextGuess(
+            name = pickLikelyName(visionText, cropped.height),
+            number = pickLikelyNumber(visionText)
+        )
     }
 
     private fun cropToGuide(bitmap: Bitmap): Bitmap? {
@@ -52,13 +59,13 @@ object CardTextRecognizer {
             .addOnFailureListener { e -> if (cont.isActive) cont.resumeWithException(e) }
     }
 
+    private val cardNumberPattern = Regex("""(\d{1,4})\s*/\s*(\d{1,4})""")
+    private val nonNameLine = Regex("""^HP\s*\d+$""", RegexOption.IGNORE_CASE)
+    private val pureNumberLine = Regex("""^\d+$""")
+
     /** Card name is printed near the top of the card, larger than the HP/type text around it. */
     private fun pickLikelyName(visionText: Text, imageHeight: Int): String? {
         val topZoneLimit = imageHeight * 0.30
-
-        val nonNameLine = Regex("""^HP\s*\d+$""", RegexOption.IGNORE_CASE)
-        val cardNumberLine = Regex("""\d+\s*/\s*\d+""")
-        val pureNumberLine = Regex("""^\d+$""")
 
         val lines = visionText.textBlocks.flatMap { it.lines }
             .filter { line ->
@@ -68,14 +75,21 @@ object CardTextRecognizer {
             }
             .filterNot { line ->
                 val text = line.text.trim()
-                nonNameLine.matches(text) || cardNumberLine.containsMatchIn(text) || pureNumberLine.matches(text)
+                nonNameLine.matches(text) || cardNumberPattern.containsMatchIn(text) || pureNumberLine.matches(text)
             }
 
         val best = lines.maxByOrNull { it.boundingBox?.height() ?: 0 } ?: return null
-        return cleanUp(best.text)
+        return cleanUpName(best.text)
     }
 
-    private fun cleanUp(raw: String): String {
+    /** Set-relative card number (e.g. "14/132") is printed along the bottom, anywhere in the full text. */
+    private fun pickLikelyNumber(visionText: Text): String? {
+        val fullText = visionText.textBlocks.flatMap { it.lines }.joinToString(" ") { it.text }
+        val match = cardNumberPattern.find(fullText) ?: return null
+        return "${match.groupValues[1]}/${match.groupValues[2]}"
+    }
+
+    private fun cleanUpName(raw: String): String {
         val cleaned = raw.replace(Regex("[^A-Za-z'’\\-.\\s]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()

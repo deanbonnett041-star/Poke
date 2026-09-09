@@ -30,7 +30,10 @@ fun AboutScreen() {
                 "It also uses on-device text recognition to suggest a name for the card from the photo — always " +
                 "shown as an editable suggestion, never a confirmed identification, since OCR on small printed " +
                 "text can misread. The text-recognition model downloads once over the network the first time " +
-                "it's used; after that, everything — grading and name suggestion — runs fully offline.",
+                "it's used; after that, grading and the name suggestion both run fully offline. What card and " +
+                "set it's from is looked up against the public Pokémon TCG API using the name (and card number, " +
+                "when readable) from the photo — this one genuinely needs an internet connection each time, and " +
+                "is shown only when it finds a confident match; grading never waits on or depends on it.",
             style = MaterialTheme.typography.bodyLarge
         )
 
