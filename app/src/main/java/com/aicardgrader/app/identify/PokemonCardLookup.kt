@@ -45,7 +45,7 @@ data class CardIdentification(
 object PokemonCardLookup {
 
     private const val BASE_URL = "https://api.pokemontcg.io/v2/cards"
-    private const val TIMEOUT_MS = 3000
+    private const val TIMEOUT_MS = 6000
 
     suspend fun lookup(nameGuess: String?, numberGuess: String?): CardIdentification? {
         val name = nameGuess?.trim().orEmpty()

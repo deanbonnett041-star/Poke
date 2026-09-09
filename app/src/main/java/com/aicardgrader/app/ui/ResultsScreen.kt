@@ -180,6 +180,26 @@ fun ResultsScreen(
             }
         }
 
+        if (identifiedCard == null && !suggestedName.isNullOrBlank()) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            "Card lookup",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            "Searched online for \"$suggestedName\" — no match found, or no internet " +
+                                "connection at the time. Pricing needs a successful match.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+        }
+
         if (result.confidence.reasons.isNotEmpty()) {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
