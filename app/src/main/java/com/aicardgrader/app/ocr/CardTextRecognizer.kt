@@ -89,13 +89,27 @@ object CardTextRecognizer {
         return "${match.groupValues[1]}/${match.groupValues[2]}"
     }
 
+    // Many cards print the HP value right after the name on the same
+    // physical line (e.g. "Sabrina's Gengar   80 HP"), so ML Kit often
+    // returns them as one OCR line -- strip that trailing contamination
+    // before it becomes part of the name guess (and breaks the exact-phrase
+    // lookup against the card API, which won't match "Sabrina's Gengar Hp").
+    private val trailingHpPattern = Regex("""\s*\d{1,3}\s*hp\.?\s*$""", RegexOption.IGNORE_CASE)
+
     private fun cleanUpName(raw: String): String {
-        val cleaned = raw.replace(Regex("[^A-Za-z'’\\-.\\s]"), " ")
+        val withoutHp = raw.replace(trailingHpPattern, "")
+        val source = if (withoutHp.trim().length >= 2) withoutHp else raw
+        val cleaned = source.replace(Regex("[^A-Za-z'’\\-.\\s]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
         if (cleaned.length < 2) return raw.trim()
-        return cleaned.split(" ").joinToString(" ") { word ->
-            if (word.isEmpty()) word else word.substring(0, 1).uppercase() + word.substring(1).lowercase()
+        val words = cleaned.split(" ").toMutableList()
+        while (words.isNotEmpty() && words.last().equals("hp", ignoreCase = true)) {
+            words.removeAt(words.lastIndex)
+        }
+        if (words.isEmpty()) return raw.trim()
+        return words.joinToString(" ") { word ->
+            word.substring(0, 1).uppercase() + word.substring(1).lowercase()
         }
     }
 }
