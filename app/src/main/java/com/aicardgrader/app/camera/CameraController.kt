@@ -75,33 +75,65 @@ suspend fun capturePhotoToBitmap(context: Context, imageCapture: ImageCapture, t
 private fun decodeAndOrient(file: File): Bitmap {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(file.absolutePath, bounds)
-
-    var sample = 1
-    while ((bounds.outWidth / sample) > MAX_DECODE_DIMENSION || (bounds.outHeight / sample) > MAX_DECODE_DIMENSION) {
-        sample *= 2
-    }
+    val sample = sampleSizeFor(bounds.outWidth, bounds.outHeight)
     val options = BitmapFactory.Options().apply { inSampleSize = sample }
     val decoded = BitmapFactory.decodeFile(file.absolutePath, options)
         ?: error("Could not decode captured photo")
 
     val rotationDegrees = try {
-        val exif = ExifInterface(file.absolutePath)
-        when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> 90
-            ExifInterface.ORIENTATION_ROTATE_180 -> 180
-            ExifInterface.ORIENTATION_ROTATE_270 -> 270
-            else -> 0
-        }
+        rotationDegreesFor(ExifInterface(file.absolutePath))
     } catch (_: Exception) {
         0
     }
+    return applyRotation(decoded, rotationDegrees)
+}
 
-    return if (rotationDegrees == 0) {
-        decoded
-    } else {
-        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-        val rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
-        if (rotated !== decoded) decoded.recycle()
-        rotated
+/**
+ * Decodes an arbitrary image picked from the device's photo library (e.g. a
+ * screenshot of an eBay listing, or a photo saved from a messaging app) --
+ * as opposed to one just captured by our own camera flow -- applying the
+ * same downsampling and EXIF-rotation handling.
+ */
+fun decodeImportedImage(context: Context, uri: android.net.Uri): Bitmap {
+    val resolver = context.contentResolver
+
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        ?: error("Could not open picked photo")
+    val sample = sampleSizeFor(bounds.outWidth, bounds.outHeight)
+
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        ?: error("Could not decode picked photo")
+
+    val rotationDegrees = try {
+        resolver.openInputStream(uri)?.use { rotationDegreesFor(ExifInterface(it)) } ?: 0
+    } catch (_: Exception) {
+        0
     }
+    return applyRotation(decoded, rotationDegrees)
+}
+
+private fun sampleSizeFor(width: Int, height: Int): Int {
+    var sample = 1
+    while ((width / sample) > MAX_DECODE_DIMENSION || (height / sample) > MAX_DECODE_DIMENSION) {
+        sample *= 2
+    }
+    return sample
+}
+
+private fun rotationDegreesFor(exif: ExifInterface): Int =
+    when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> 90
+        ExifInterface.ORIENTATION_ROTATE_180 -> 180
+        ExifInterface.ORIENTATION_ROTATE_270 -> 270
+        else -> 0
+    }
+
+private fun applyRotation(decoded: Bitmap, rotationDegrees: Int): Bitmap {
+    if (rotationDegrees == 0) return decoded
+    val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+    val rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+    if (rotated !== decoded) decoded.recycle()
+    return rotated
 }

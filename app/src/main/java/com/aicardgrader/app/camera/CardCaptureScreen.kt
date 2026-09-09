@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -44,9 +45,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import com.aicardgrader.app.grading.standardCardGuideRect
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 enum class CaptureSide(val label: String, val instructions: String) {
@@ -62,6 +66,38 @@ fun CardCaptureScreen(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var pendingImport by remember { mutableStateOf<Bitmap?>(null) }
+    var importError by remember { mutableStateOf<String?>(null) }
+
+    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    pendingImport = withContext(Dispatchers.IO) { decodeImportedImage(context, uri) }
+                } catch (t: Throwable) {
+                    importError = "Could not load that photo: ${t.message}"
+                }
+            }
+        }
+    }
+    val launchPicker = { pickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+
+    val importing = pendingImport
+    if (importing != null) {
+        ImportAdjustScreen(
+            source = importing,
+            title = "Adjust ${side.label.lowercase()}",
+            onConfirm = { cropped ->
+                pendingImport = null
+                onCaptured(cropped)
+            },
+            onCancel = { pendingImport = null }
+        )
+        return
+    }
+
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -73,15 +109,36 @@ fun CardCaptureScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (hasPermission) {
-            CameraContent(side = side, onCaptured = onCaptured, onSkipBack = onSkipBack, onClose = onClose)
+            CameraContent(
+                side = side,
+                onCaptured = onCaptured,
+                onSkipBack = onSkipBack,
+                onClose = onClose,
+                onImportClick = launchPicker
+            )
         } else {
-            PermissionRequest(onClose = onClose) { permissionLauncher.launch(Manifest.permission.CAMERA) }
+            PermissionRequest(
+                onClose = onClose,
+                onRequest = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                onImportClick = launchPicker
+            )
+        }
+
+        importError?.let {
+            Text(
+                it,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color.Red.copy(alpha = 0.6f))
+                    .padding(16.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun PermissionRequest(onClose: () -> Unit, onRequest: () -> Unit) {
+private fun PermissionRequest(onClose: () -> Unit, onRequest: () -> Unit, onImportClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -98,6 +155,8 @@ private fun PermissionRequest(onClose: () -> Unit, onRequest: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         Button(onClick = onRequest) { Text("Allow camera access") }
         Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onImportClick) { Text("Or import a photo instead") }
+        Spacer(Modifier.height(8.dp))
         TextButton(onClick = onClose) { Text("Cancel") }
     }
 }
@@ -107,7 +166,8 @@ private fun CameraContent(
     side: CaptureSide,
     onCaptured: (Bitmap) -> Unit,
     onSkipBack: (() -> Unit)?,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onImportClick: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -140,6 +200,16 @@ private fun CameraContent(
                 .background(Color.Black.copy(alpha = 0.35f), CircleShape)
         ) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Close", tint = Color.White)
+        }
+
+        IconButton(
+            onClick = onImportClick,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+                .background(Color.Black.copy(alpha = 0.35f), CircleShape)
+        ) {
+            Icon(Icons.Filled.PhotoLibrary, contentDescription = "Import a photo instead", tint = Color.White)
         }
 
         Column(
