@@ -40,7 +40,7 @@
 
         <!-- Home-screen widget: a one-tap shortcut straight into the
              capture flow. Must be exported so the system launcher (a
-             different app) can deliver widget-update broadcasts to it --
+             different app) can deliver widget-update broadcasts to it;
              that's the standard, expected exception to keeping components
              unexported. -->
         <receiver
