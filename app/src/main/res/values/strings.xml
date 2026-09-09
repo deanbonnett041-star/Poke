@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AI Card Grader</string>
+    <string name="disclaimer_short">Estimates only — not official grades. Not affiliated with or endorsed by PSA, Beckett/BGS, CGC, or SGC.</string>
+</resources>
