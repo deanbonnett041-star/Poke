@@ -21,6 +21,21 @@ android {
         }
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Committed on purpose (debug keystores are never sensitive, and
+            // sharing one keeps every CI build signed identically). Without
+            // this, a fresh CI runner would auto-generate a new random debug
+            // key on every build, and installing a new APK over an old one
+            // signed with a different key silently fails on-device -- you'd
+            // keep testing a stale build without any clear error.
+            storeFile = rootProject.file("keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

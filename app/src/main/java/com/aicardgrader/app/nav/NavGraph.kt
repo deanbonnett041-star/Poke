@@ -6,6 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import com.aicardgrader.app.CardGraderViewModel
 import com.aicardgrader.app.camera.CaptureSide
 import com.aicardgrader.app.camera.CardCaptureScreen
@@ -17,7 +18,23 @@ import com.aicardgrader.app.ui.HomeScreen
 import com.aicardgrader.app.ui.ResultsScreen
 
 @Composable
-fun AppNavGraph(navController: NavHostController, viewModel: CardGraderViewModel) {
+fun AppNavGraph(
+    navController: NavHostController,
+    viewModel: CardGraderViewModel,
+    startInCapture: Boolean = false
+) {
+    // Home stays the actual start destination (so every "pop back to home"
+    // call elsewhere in this graph keeps working), but a widget launch
+    // immediately pushes straight into capture on top of it -- the fastest
+    // path from tapping the widget to being ready to shoot, while a back
+    // press still lands somewhere sensible (Home) instead of exiting.
+    LaunchedEffect(startInCapture) {
+        if (startInCapture) {
+            viewModel.resetCapture()
+            navController.navigate(Routes.CAPTURE_FRONT)
+        }
+    }
+
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(

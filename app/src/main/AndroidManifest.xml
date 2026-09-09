@@ -37,5 +37,22 @@
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="ocr" />
+
+        <!-- Home-screen widget: a one-tap shortcut straight into the
+             capture flow. Must be exported so the system launcher (a
+             different app) can deliver widget-update broadcasts to it --
+             that's the standard, expected exception to keeping components
+             unexported. -->
+        <receiver
+            android:name=".widget.SlabrateWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_grade_card_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/slabrate_widget_info" />
+        </receiver>
     </application>
 </manifest>

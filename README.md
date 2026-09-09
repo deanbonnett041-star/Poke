@@ -53,6 +53,19 @@ desktop JVM independently of the Android toolchain.
   company.
 - History (Room database) of previously graded cards, stored locally.
 - Tips screen for getting a more accurate read (lighting, glare, alignment).
+- Gallery import (e.g. a photo saved from an eBay listing), with a
+  pinch/pan crop step before grading.
+- A "Grade a Card" home-screen widget that jumps straight into the capture
+  flow — a widget can't embed a live camera itself, but skipping the app's
+  home screen is exactly the kind of tap saved that matters at a card show.
+
+## Signing
+
+`keystore/debug.keystore` is committed on purpose — it's a debug-only key
+(never sensitive), and sharing it keeps every CI build signed identically.
+Without it, each fresh CI runner would generate its own random debug key,
+and installing a new APK signed with a different key over an old one fails
+silently on-device rather than showing a clear error.
 
 ## Building
 

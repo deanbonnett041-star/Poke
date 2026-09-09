@@ -4,7 +4,8 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,11 +83,39 @@ fun ImportAdjustScreen(
                 // spreads wider than a ~300dp box, so if only the frame were
                 // listening, one finger would often land outside it and the
                 // gesture would degrade to a single-finger pan.
+                //
+                // Tracked manually (rather than via detectTransformGestures)
+                // so pinch distance is computed explicitly frame-by-frame --
+                // no dependency on a helper's internal touch-slop/centroid
+                // handling that can behave inconsistently across devices.
                 .pointerInput(source) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        val newScale = (userScale * zoom).coerceIn(MIN_USER_SCALE, MAX_USER_SCALE)
-                        userScale = newScale
-                        offset = clampOffset(offset + pan, frameSizePx, source, newScale)
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var previousPinchDistance = 0f
+                        var wasPinching = false
+                        do {
+                            val event = awaitPointerEvent()
+                            val pointers = event.changes.filter { it.pressed }
+
+                            if (pointers.size >= 2) {
+                                val distance = (pointers[0].position - pointers[1].position).getDistance()
+                                if (wasPinching && previousPinchDistance > 0f) {
+                                    val zoomFactor = distance / previousPinchDistance
+                                    userScale = (userScale * zoomFactor).coerceIn(MIN_USER_SCALE, MAX_USER_SCALE)
+                                }
+                                previousPinchDistance = distance
+                                wasPinching = true
+                                pointers.forEach { it.consume() }
+                            } else if (pointers.size == 1) {
+                                wasPinching = false
+                                val change = pointers[0]
+                                val drag = change.position - change.previousPosition
+                                if (drag != Offset.Zero) {
+                                    offset = clampOffset(offset + drag, frameSizePx, source, userScale)
+                                    change.consume()
+                                }
+                            }
+                        } while (pointers.isNotEmpty())
                     }
                 },
             contentAlignment = Alignment.Center

@@ -23,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import com.aicardgrader.app.nav.AppNavGraph
 import com.aicardgrader.app.nav.Routes
 import com.aicardgrader.app.ui.theme.AiCardGraderTheme
+import com.aicardgrader.app.widget.SlabrateWidgetProvider
 
 class MainActivity : ComponentActivity() {
 
@@ -30,9 +31,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val startInCapture = intent?.getBooleanExtra(SlabrateWidgetProvider.EXTRA_START_CAPTURE, false) == true
         setContent {
             AiCardGraderTheme {
-                AppScaffold(viewModel)
+                AppScaffold(viewModel, startInCapture)
             }
         }
     }
@@ -40,7 +42,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppScaffold(viewModel: CardGraderViewModel) {
+private fun AppScaffold(viewModel: CardGraderViewModel, startInCapture: Boolean = false) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.hierarchy?.firstOrNull()?.route
@@ -68,7 +70,7 @@ private fun AppScaffold(viewModel: CardGraderViewModel) {
         }
     ) { padding ->
         androidx.compose.foundation.layout.Box(modifier = Modifier.padding(padding)) {
-            AppNavGraph(navController = navController, viewModel = viewModel)
+            AppNavGraph(navController = navController, viewModel = viewModel, startInCapture = startInCapture)
         }
     }
 }
