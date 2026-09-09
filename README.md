@@ -49,6 +49,15 @@ rough, photo-based estimate, never as an official or certified grade.
    graded (PSA 10, PSA 9, etc.) sale data, so rather than fabricate a
    graded price estimate, the results screen instead links straight to
    real, current eBay sold listings for that exact card and grade.
+8. Optionally, `XimilarGradingClient` (in `ximilar/`) requests a second,
+   independent grade from Ximilar's paid card-grading API (a real trained
+   computer-vision model, unlike this app's own from-scratch heuristics)
+   and shows it alongside the on-device estimate. Off by default; a user
+   enables it by entering their own Ximilar API key in Settings. That key
+   is stored only in this device's local app storage -- never bundled
+   into the app build or committed to source control, since a key baked
+   into a redistributed debug APK could be extracted and billed against
+   its owner by anyone who downloads it.
 
 The whole grading engine (`app/src/main/java/com/aicardgrader/app/grading/`)
 is plain Kotlin with no Android dependencies, so it can be unit-tested on a
@@ -76,6 +85,9 @@ desktop JVM independently of the Android toolchain.
 - A "Grade a Card" home-screen widget that jumps straight into the capture
   flow — a widget can't embed a live camera itself, but skipping the app's
   home screen is exactly the kind of tap saved that matters at a card show.
+- Optional second opinion from Ximilar's paid AI card-grading API, shown
+  alongside the free on-device estimate when the user supplies their own
+  API key in Settings.
 
 ## Signing
 

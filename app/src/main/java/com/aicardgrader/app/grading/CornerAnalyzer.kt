@@ -35,8 +35,13 @@ object CornerAnalyzer {
         val worst = corners.minOf { it.grade }
         // The worst corner drags the overall score down more than a simple
         // average would, mirroring how a single damaged corner matters more
-        // to a grader than the other three being pristine.
-        val grade = roundToHalf(avg * 0.5 + worst * 0.5)
+        // to a grader than the other three being pristine -- but at 50/50 a
+        // single corner's sharpness reading (which is inherently noisier
+        // than the other three combined, since it's one small patch) could
+        // single-handedly cap the whole subgrade. Weighted like Centering's
+        // worst/best axis split instead, so one noisy corner still counts
+        // for more than its literal 1-in-4 share without dominating outright.
+        val grade = roundToHalf(avg * 0.65 + worst * 0.35)
         return CornerResult(corners, grade)
     }
 
@@ -113,13 +118,24 @@ object CornerAnalyzer {
         val far = if (farCount == 0) 0.0 else farSum.toDouble() / farCount
         if (far < 6.0) return 8.0 // boundary too low-contrast to judge reliably; don't punish
 
+        // A corner tip is a literal geometric point, so even a perfectly
+        // sharp, undamaged corner naturally shows some gradient falloff
+        // right at the tip in a real phone photo -- lens point-spread
+        // blur, focus softness, and JPEG block artifacts all concentrate
+        // their effect exactly there, in a way a straight edge segment
+        // (EdgeAnalyzer's territory) doesn't suffer from nearly as much.
+        // These bands were originally tuned against clean synthetic test
+        // images with no such falloff, which read as harsher than
+        // warranted on real photos of undamaged corners -- shifted down
+        // to leave room for that expected optical softening before
+        // treating it as actual wear.
         val ratio = (near / far).coerceIn(0.0, 1.3)
         return when {
-            ratio >= 0.85 -> 10.0
-            ratio >= 0.70 -> 8.5
-            ratio >= 0.55 -> 7.0
-            ratio >= 0.40 -> 5.0
-            ratio >= 0.25 -> 3.0
+            ratio >= 0.70 -> 10.0
+            ratio >= 0.55 -> 8.5
+            ratio >= 0.40 -> 7.0
+            ratio >= 0.28 -> 5.0
+            ratio >= 0.15 -> 3.0
             else -> 1.5
         }
     }

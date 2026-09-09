@@ -51,6 +51,7 @@ private fun AppScaffold(viewModel: CardGraderViewModel, startInCapture: Boolean 
         Routes.HISTORY -> "History"
         Routes.HISTORY_DETAIL_PATTERN -> "Card detail"
         Routes.ABOUT -> "How this works"
+        Routes.SETTINGS -> "Settings"
         Routes.RESULTS -> "Results"
         else -> null
     }

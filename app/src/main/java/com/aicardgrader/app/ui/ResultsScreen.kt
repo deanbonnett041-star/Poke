@@ -31,6 +31,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aicardgrader.app.CardGraderViewModel
 import com.aicardgrader.app.data.displayName
 import com.aicardgrader.app.data.toEstimatesUi
@@ -38,6 +39,7 @@ import com.aicardgrader.app.identify.CardIdentification
 import com.aicardgrader.app.identify.PokemonCardLookup
 import com.aicardgrader.app.ui.components.GradeBadge
 import com.aicardgrader.app.ui.components.SubgradeBars
+import com.aicardgrader.app.ui.components.formatGrade
 
 @Composable
 fun ResultsScreen(
@@ -55,6 +57,8 @@ fun ResultsScreen(
     val suggestedName = viewModel.suggestedCardName
     val identifiedCard = viewModel.identifiedCard
     val lookupDiagnostic = viewModel.lookupDiagnostic
+    val ximilarGrade = viewModel.ximilarGrade
+    val ximilarDiagnostic = viewModel.ximilarDiagnostic
     val prefillName = identifiedCard?.name ?: suggestedName
     var cardName by remember(prefillName) { mutableStateOf(prefillName ?: "") }
     var saved by remember { mutableStateOf(false) }
@@ -227,6 +231,57 @@ fun ResultsScreen(
         item {
             Text("Category breakdown", style = MaterialTheme.typography.titleMedium)
             SubgradeBars(result.subGrades)
+        }
+
+        if (ximilarGrade != null || !ximilarDiagnostic.isNullOrBlank()) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            "AI grading (Ximilar)",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (ximilarGrade != null) {
+                            ximilarGrade.final?.let {
+                                Text(formatGrade(it), fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                            }
+                            ximilarGrade.condition?.let {
+                                Text(it, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            val subLines = listOfNotNull(
+                                ximilarGrade.centering?.let { "Centering: ${formatGrade(it)}" },
+                                ximilarGrade.corners?.let { "Corners: ${formatGrade(it)}" },
+                                ximilarGrade.edges?.let { "Edges: ${formatGrade(it)}" },
+                                ximilarGrade.surface?.let { "Surface: ${formatGrade(it)}" }
+                            )
+                            if (subLines.isNotEmpty()) {
+                                Spacer(Modifier.height(4.dp))
+                                subLines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                                Spacer(Modifier.height(4.dp))
+                            }
+                            Text(
+                                "An independent second opinion from Ximilar's AI grading model — separate from the on-device estimate above.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        } else {
+                            Text(
+                                "Couldn't get an AI grade for this card.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                            if (!ximilarDiagnostic.isNullOrBlank()) {
+                                Text(
+                                    "Reason: $ximilarDiagnostic",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         item {

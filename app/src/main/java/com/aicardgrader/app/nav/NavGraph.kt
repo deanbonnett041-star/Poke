@@ -16,6 +16,7 @@ import com.aicardgrader.app.ui.HistoryDetailScreen
 import com.aicardgrader.app.ui.HistoryScreen
 import com.aicardgrader.app.ui.HomeScreen
 import com.aicardgrader.app.ui.ResultsScreen
+import com.aicardgrader.app.ui.SettingsScreen
 
 @Composable
 fun AppNavGraph(
@@ -43,7 +44,8 @@ fun AppNavGraph(
                     navController.navigate(Routes.CAPTURE_FRONT)
                 },
                 onOpenHistory = { navController.navigate(Routes.HISTORY) },
-                onOpenAbout = { navController.navigate(Routes.ABOUT) }
+                onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) }
             )
         }
 
@@ -108,6 +110,10 @@ fun AppNavGraph(
 
         composable(Routes.ABOUT) {
             AboutScreen()
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen()
         }
     }
 }

@@ -33,7 +33,10 @@ fun AboutScreen() {
                 "it's used; after that, grading and the name suggestion both run fully offline. What card and " +
                 "set it's from is looked up against the public Pokémon TCG API using the name (and card number, " +
                 "when readable) from the photo — this one genuinely needs an internet connection each time, and " +
-                "is shown only when it finds a confident match; grading never waits on or depends on it.",
+                "is shown only when it finds a confident match; grading never waits on or depends on it. If " +
+                "you add your own Ximilar API key in Settings, the app also requests a second, independent " +
+                "grade from Ximilar's trained AI grading model and shows it alongside the on-device estimate — " +
+                "off by default, and your key stays only on this device.",
             style = MaterialTheme.typography.bodyLarge
         )
 

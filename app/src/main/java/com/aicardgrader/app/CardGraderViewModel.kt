@@ -17,6 +17,10 @@ import com.aicardgrader.app.identify.CardIdentification
 import com.aicardgrader.app.identify.LookupOutcome
 import com.aicardgrader.app.identify.PokemonCardLookup
 import com.aicardgrader.app.ocr.CardTextRecognizer
+import com.aicardgrader.app.ximilar.ApiKeySettings
+import com.aicardgrader.app.ximilar.XimilarGrade
+import com.aicardgrader.app.ximilar.XimilarGradingClient
+import com.aicardgrader.app.ximilar.XimilarOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.SharingStarted
@@ -44,6 +48,10 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var lookupDiagnostic by mutableStateOf<String?>(null)
         private set
+    var ximilarGrade by mutableStateOf<XimilarGrade?>(null)
+        private set
+    var ximilarDiagnostic by mutableStateOf<String?>(null)
+        private set
 
     val history: StateFlow<List<CardRecord>> = repository.observeHistory()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -66,6 +74,8 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
         suggestedCardName = null
         identifiedCard = null
         lookupDiagnostic = null
+        ximilarGrade = null
+        ximilarDiagnostic = null
     }
 
     fun runGrading(onDone: () -> Unit) {
@@ -93,12 +103,27 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 Triple(guess, outcome.card, outcome.diagnostic)
             }
+            // Optional second opinion from Ximilar's paid grading API --
+            // only runs when the user entered their own key in Settings.
+            // Never blocks or affects the free on-device estimate above.
+            val ximilarKey = ApiKeySettings.getXimilarApiKey(getApplication())
+            val ximilarDeferred = async(Dispatchers.Default) {
+                if (ximilarKey.isNullOrBlank()) {
+                    XimilarOutcome(null, null)
+                } else {
+                    runCatching { XimilarGradingClient.grade(ximilarKey, front, backBitmap) }
+                        .getOrElse { XimilarOutcome(null, "${it.javaClass.simpleName}: ${it.message}") }
+                }
+            }
 
             currentResult = gradingDeferred.await()
             val (guess, card, diagnostic) = identificationDeferred.await()
             suggestedCardName = guess?.name
             identifiedCard = card
             lookupDiagnostic = diagnostic
+            val ximilarOutcome = ximilarDeferred.await()
+            ximilarGrade = ximilarOutcome.grade
+            ximilarDiagnostic = ximilarOutcome.diagnostic
             isGrading = false
             onDone()
         }

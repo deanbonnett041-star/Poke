@@ -10,4 +10,5 @@ object Routes {
     const val HISTORY_DETAIL_PATTERN = "history_detail/{id}"
     fun historyDetail(id: Long) = "history_detail/$id"
     const val ABOUT = "about"
+    const val SETTINGS = "settings"
 }
