@@ -45,7 +45,8 @@ fun ResultsScreen(
     }
     val front = viewModel.frontBitmap
     val back = viewModel.backBitmap
-    var cardName by remember { mutableStateOf("") }
+    val suggestedName = viewModel.suggestedCardName
+    var cardName by remember(suggestedName) { mutableStateOf(suggestedName ?: "") }
     var saved by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -129,6 +130,13 @@ fun ResultsScreen(
                     label = { Text("Name this card (optional)") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (!suggestedName.isNullOrBlank()) {
+                    Text(
+                        "Detected on-device from the photo — edit if it's not quite right.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = {

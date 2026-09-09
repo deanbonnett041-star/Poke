@@ -29,5 +29,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Lets Play Store pre-fetch the on-device text-recognition model at
+             install time when installed via Play; harmless no-op otherwise
+             (e.g. sideloaded debug builds), which still download the model
+             on first use over the network and run fully offline after that. -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr" />
     </application>
 </manifest>

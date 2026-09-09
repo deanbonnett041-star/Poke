@@ -13,12 +13,13 @@ import com.aicardgrader.app.grading.GradingEngine
 import com.aicardgrader.app.grading.GradingResult
 import com.aicardgrader.app.grading.standardCardGuideRect
 import com.aicardgrader.app.grading.toPixelImage
+import com.aicardgrader.app.ocr.CardTextRecognizer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -33,6 +34,8 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
     var isGrading by mutableStateOf(false)
         private set
     var lastSavedRecordId by mutableStateOf<Long?>(null)
+        private set
+    var suggestedCardName by mutableStateOf<String?>(null)
         private set
 
     val history: StateFlow<List<CardRecord>> = repository.observeHistory()
@@ -53,18 +56,23 @@ class CardGraderViewModel(app: Application) : AndroidViewModel(app) {
         backBitmap = null
         currentResult = null
         lastSavedRecordId = null
+        suggestedCardName = null
     }
 
     fun runGrading(onDone: () -> Unit) {
         val front = frontBitmap ?: return
         isGrading = true
         viewModelScope.launch {
-            val result = withContext(Dispatchers.Default) {
+            val gradingResult = async(Dispatchers.Default) {
                 val pixelImage = front.toPixelImage()
                 val guide = standardCardGuideRect(pixelImage.width, pixelImage.height)
                 GradingEngine.grade(pixelImage, guide)
             }
-            currentResult = result
+            val nameSuggestion = async(Dispatchers.Default) {
+                runCatching { CardTextRecognizer.suggestCardName(front) }.getOrNull()
+            }
+            currentResult = gradingResult.await()
+            suggestedCardName = nameSuggestion.await()
             isGrading = false
             onDone()
         }

@@ -26,7 +26,11 @@ fun AboutScreen() {
         Text(
             "AI Card Grader analyzes your photos on-device to estimate four things graders look at: " +
                 "centering, corner sharpness, edge wear, and surface condition. It then converts those into " +
-                "an estimated grade formatted in the style of PSA, Beckett (BGS), CGC, and SGC's own 1–10 scales.",
+                "an estimated grade formatted in the style of PSA, Beckett (BGS), CGC, and SGC's own 1–10 scales. " +
+                "It also uses on-device text recognition to suggest a name for the card from the photo — always " +
+                "shown as an editable suggestion, never a confirmed identification, since OCR on small printed " +
+                "text can misread. The text-recognition model downloads once over the network the first time " +
+                "it's used; after that, everything — grading and name suggestion — runs fully offline.",
             style = MaterialTheme.typography.bodyLarge
         )
 
