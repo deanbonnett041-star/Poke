@@ -76,11 +76,11 @@ object XimilarGradingClient {
                 val responseBody = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
 
                 if (code !in 200..299) {
-                    return@withContext XimilarOutcome(null, "server returned HTTP $code: ${responseBody.take(160)}")
+                    return@withContext XimilarOutcome(null, "server returned HTTP $code: ${responseBody.take(400)}")
                 }
                 val grade = parseGrade(responseBody)
                 if (grade == null) {
-                    XimilarOutcome(null, "unexpected response shape: ${responseBody.take(160)}")
+                    XimilarOutcome(null, "unexpected response shape: ${responseBody.take(400)}")
                 } else {
                     XimilarOutcome(grade, null)
                 }
@@ -105,7 +105,7 @@ object XimilarGradingClient {
             return null
         }
         val grades = findGradesObject(root, depth = 0) ?: return null
-        return XimilarGrade(
+        val result = XimilarGrade(
             final = numericValue(grades.opt("final")),
             condition = grades.optString("condition").takeIf { it.isNotBlank() },
             centering = numericValue(grades.opt("centering")),
@@ -113,6 +113,16 @@ object XimilarGradingClient {
             edges = numericValue(grades.opt("edges")),
             surface = numericValue(grades.opt("surface"))
         )
+        // findGradesObject matches on key names alone, so it can land on an
+        // object that merely has fields called "final"/"corners"/etc. with
+        // a shape numericValue() can't read (not the actual grades summary,
+        // or nested deeper than assumed). Treat "found nothing usable" the
+        // same as "found nothing" -- a parse failure with the raw response
+        // to look at -- rather than silently returning an empty result.
+        val hasAnyValue = listOfNotNull(
+            result.final, result.condition, result.centering, result.corners, result.edges, result.surface
+        ).isNotEmpty()
+        return if (hasAnyValue) result else null
     }
 
     private val subgradeKeys = setOf("corners", "edges", "surface", "centering")
