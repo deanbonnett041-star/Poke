@@ -97,13 +97,17 @@ private fun decodeAndOrient(file: File): Bitmap {
 fun decodeImportedImage(context: Context, uri: android.net.Uri): Bitmap {
     val resolver = context.contentResolver
 
+    // decodeStream always returns null in inJustDecodeBounds mode -- that's
+    // expected, so the "did the stream even open" check has to happen on
+    // opening the stream itself, not on the (always-null) decode result.
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        ?: error("Could not open picked photo")
+    val boundsStream = resolver.openInputStream(uri) ?: error("Could not open picked photo")
+    boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
     val sample = sampleSizeFor(bounds.outWidth, bounds.outHeight)
 
     val options = BitmapFactory.Options().apply { inSampleSize = sample }
-    val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+    val decodeStream = resolver.openInputStream(uri) ?: error("Could not open picked photo")
+    val decoded = decodeStream.use { BitmapFactory.decodeStream(it, null, options) }
         ?: error("Could not decode picked photo")
 
     val rotationDegrees = try {
