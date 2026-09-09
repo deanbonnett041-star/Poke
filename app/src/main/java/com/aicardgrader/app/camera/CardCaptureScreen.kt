@@ -149,7 +149,7 @@ private fun PermissionRequest(onClose: () -> Unit, onRequest: () -> Unit, onImpo
         Text("Camera access needed", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(12.dp))
         Text(
-            "AI Card Grader needs camera access to photograph your card for grading. Photos stay on your device.",
+            "Slabrate needs camera access to photograph your card for grading. Photos stay on your device.",
             style = MaterialTheme.typography.bodyMedium
         )
         Spacer(Modifier.height(24.dp))

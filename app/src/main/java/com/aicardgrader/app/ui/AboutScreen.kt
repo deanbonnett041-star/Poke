@@ -24,7 +24,7 @@ fun AboutScreen() {
     ) {
         Text("How this works", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(
-            "AI Card Grader analyzes your photos on-device to estimate four things graders look at: " +
+            "Slabrate analyzes your photos on-device to estimate four things graders look at: " +
                 "centering, corner sharpness, edge wear, and surface condition. It then converts those into " +
                 "an estimated grade formatted in the style of PSA, Beckett (BGS), CGC, and SGC's own 1–10 scales. " +
                 "It also uses on-device text recognition to suggest a name for the card from the photo — always " +

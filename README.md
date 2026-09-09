@@ -1,4 +1,4 @@
-# AI Card Grader (Android)
+# Slabrate (Android)
 
 Photograph a Pokémon card and get an **AI-estimated grade**, presented in the
 style of the four major grading companies: **PSA**, **Beckett (BGS)**,

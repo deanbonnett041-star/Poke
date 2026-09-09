@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AI Card Grader"
+rootProject.name = "Slabrate"
 include(":app")
