@@ -1,6 +1,7 @@
 package com.aicardgrader.app.identify
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -20,6 +21,15 @@ data class CardIdentification(
     /** Which printing the price above is for (e.g. "Holofoil", "Normal") -- cards often have several. */
     val rawPriceVariant: String?
 )
+
+/**
+ * Result of a lookup attempt. [diagnostic] is null on success (or when
+ * there was no name to search at all); when [card] is null it names why
+ * -- an HTTP status, an exception type/message, or "no card matched" --
+ * so a real failure reason is visible instead of every kind of failure
+ * collapsing into the same silent "nothing found".
+ */
+data class LookupOutcome(val card: CardIdentification?, val diagnostic: String?)
 
 /**
  * Looks a card up against the public Pokemon TCG API (pokemontcg.io) by
@@ -42,46 +52,55 @@ data class CardIdentification(
  * download), so it's always a best-effort enrichment shown only when it
  * succeeds -- grading itself never depends on it or waits long for it.
  */
-/**
- * Result of a lookup attempt. [diagnostic] is null on success (or when
- * there was no name to search at all); when [card] is null it names why
- * -- an HTTP status, an exception type/message, or "no card matched" --
- * so a real failure reason is visible instead of every kind of failure
- * collapsing into the same silent "nothing found".
- */
-data class LookupOutcome(val card: CardIdentification?, val diagnostic: String?)
-
 object PokemonCardLookup {
 
     private const val BASE_URL = "https://api.pokemontcg.io/v2/cards"
     private const val TIMEOUT_MS = 6000
+
+    // The free, unauthenticated tier of this API is shared and rate-limited,
+    // and observably returns intermittent HTTP 500s under load even for a
+    // query that's otherwise correct and matches fine on a retry -- so a
+    // single 5xx isn't treated as a final answer, just a reason to try again.
+    private const val MAX_ATTEMPTS = 3
+    private const val RETRY_DELAY_MS = 600L
 
     suspend fun lookup(nameGuess: String?, numberGuess: String?): LookupOutcome {
         val name = nameGuess?.trim().orEmpty()
         if (name.length < 2) return LookupOutcome(null, null)
 
         return withContext(Dispatchers.IO) {
-            var connection: HttpURLConnection? = null
-            try {
-                val url = URL("$BASE_URL?q=${buildQuery(name, numberGuess)}&pageSize=1")
-                connection = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = TIMEOUT_MS
-                    readTimeout = TIMEOUT_MS
-                    setRequestProperty("Accept", "application/json")
-                }
-                val code = connection.responseCode
-                if (code != HttpURLConnection.HTTP_OK) {
-                    return@withContext LookupOutcome(null, "server returned HTTP $code")
-                }
-                val body = connection.inputStream.bufferedReader().use { it.readText() }
-                val card = parseFirstCard(body)
-                if (card == null) LookupOutcome(null, "no card matched") else LookupOutcome(card, null)
-            } catch (e: Exception) {
-                LookupOutcome(null, "${e.javaClass.simpleName}: ${e.message}")
-            } finally {
-                connection?.disconnect()
+            var outcome = LookupOutcome(null, null)
+            for (attempt in 1..MAX_ATTEMPTS) {
+                outcome = attemptLookup(name, numberGuess)
+                val isServerError = outcome.diagnostic?.startsWith("server returned HTTP 5") == true
+                if (!isServerError || attempt == MAX_ATTEMPTS) break
+                delay(RETRY_DELAY_MS)
             }
+            outcome
+        }
+    }
+
+    private fun attemptLookup(name: String, numberGuess: String?): LookupOutcome {
+        var connection: HttpURLConnection? = null
+        return try {
+            val url = URL("$BASE_URL?q=${buildQuery(name, numberGuess)}&pageSize=1")
+            connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                setRequestProperty("Accept", "application/json")
+            }
+            val code = connection.responseCode
+            if (code != HttpURLConnection.HTTP_OK) {
+                return LookupOutcome(null, "server returned HTTP $code")
+            }
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            val card = parseFirstCard(body)
+            if (card == null) LookupOutcome(null, "no card matched") else LookupOutcome(card, null)
+        } catch (e: Exception) {
+            LookupOutcome(null, "${e.javaClass.simpleName}: ${e.message}")
+        } finally {
+            connection?.disconnect()
         }
     }
 
