@@ -1,0 +1,47 @@
+name: Debug Pokemon TCG API Query
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-queries:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exact phrase, plus-encoded space (current app behavior)
+        run: |
+          curl -sS "https://api.pokemontcg.io/v2/cards?q=name%3A%22Sabrina%27s+Gengar%22&pageSize=3" \
+            -H "Accept: application/json" | head -c 2000
+          echo
+          echo "---"
+
+      - name: Exact phrase, percent-20-encoded space
+        run: |
+          curl -sS -G "https://api.pokemontcg.io/v2/cards" \
+            --data-urlencode 'q=name:"Sabrina'"'"'s Gengar"' \
+            --data-urlencode 'pageSize=3' \
+            -H "Accept: application/json" | head -c 2000
+          echo
+          echo "---"
+
+      - name: Unquoted partial match, plus-encoded space
+        run: |
+          curl -sS "https://api.pokemontcg.io/v2/cards?q=name%3ASabrina%27s+Gengar&pageSize=3" \
+            -H "Accept: application/json" | head -c 2000
+          echo
+          echo "---"
+
+      - name: Unquoted single word
+        run: |
+          curl -sS -G "https://api.pokemontcg.io/v2/cards" \
+            --data-urlencode 'q=name:Gengar' \
+            --data-urlencode 'pageSize=3' \
+            -H "Accept: application/json" | head -c 2000
+          echo
+          echo "---"
+
+      - name: HTTP status codes for each form
+        run: |
+          echo "plus-encoded exact:"
+          curl -sS -o /dev/null -w "%{http_code}\n" "https://api.pokemontcg.io/v2/cards?q=name%3A%22Sabrina%27s+Gengar%22&pageSize=3"
+          echo "percent20 exact:"
+          curl -sS -o /dev/null -w "%{http_code}\n" -G "https://api.pokemontcg.io/v2/cards" --data-urlencode 'q=name:"Sabrina'"'"'s Gengar"' --data-urlencode 'pageSize=3'
