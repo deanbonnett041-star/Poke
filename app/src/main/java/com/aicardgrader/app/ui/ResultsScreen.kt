@@ -1,5 +1,7 @@
 package com.aicardgrader.app.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,11 +28,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aicardgrader.app.CardGraderViewModel
 import com.aicardgrader.app.data.displayName
 import com.aicardgrader.app.data.toEstimatesUi
+import com.aicardgrader.app.identify.CardIdentification
+import com.aicardgrader.app.identify.PokemonCardLookup
 import com.aicardgrader.app.ui.components.GradeBadge
 import com.aicardgrader.app.ui.components.SubgradeBars
 
@@ -43,6 +49,7 @@ fun ResultsScreen(
         Text("No result available.", modifier = Modifier.padding(24.dp))
         return
     }
+    val context = LocalContext.current
     val front = viewModel.frontBitmap
     val back = viewModel.backBitmap
     val suggestedName = viewModel.suggestedCardName
@@ -128,6 +135,46 @@ fun ResultsScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
+
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Market price",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (identifiedCard.rawPriceUsd != null) {
+                            Text(
+                                "Raw: $%.2f (%s, TCGplayer market price)".format(
+                                    identifiedCard.rawPriceUsd,
+                                    identifiedCard.rawPriceVariant ?: "ungraded"
+                                ),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        } else {
+                            Text(
+                                "No raw price found for this printing.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                        Text(
+                            "No reliable free source for graded (PSA 10, PSA 9, etc.) prices — " +
+                                "these open real, current sold listings for this exact card instead of guessing.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("PSA 10", "PSA 9", "Raw").forEach { gradeLabel ->
+                                OutlinedButton(
+                                    onClick = {
+                                        val url = PokemonCardLookup.gradedPriceCheckUrl(identifiedCard, gradeLabel)
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text(gradeLabel) }
+                            }
+                        }
                     }
                 }
             }

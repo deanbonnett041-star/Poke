@@ -44,6 +44,11 @@ rough, photo-based estimate, never as an official or certified grade.
    card and set. Unlike everything above, this is a live network call
    every time -- it's shown only when it succeeds, and grading itself
    never depends on or waits on it.
+7. The same lookup also surfaces a real, current raw (ungraded) market
+   price from TCGplayer when available. There's no free API with real
+   graded (PSA 10, PSA 9, etc.) sale data, so rather than fabricate a
+   graded price estimate, the results screen instead links straight to
+   real, current eBay sold listings for that exact card and grade.
 
 The whole grading engine (`app/src/main/java/com/aicardgrader/app/grading/`)
 is plain Kotlin with no Android dependencies, so it can be unit-tested on a
@@ -58,6 +63,9 @@ desktop JVM independently of the Android toolchain.
 - Card/set identification via the public Pokemon TCG API (name, set,
   series, card number, rarity) — the one feature here that needs a live
   network connection.
+- Real raw (ungraded) market price from TCGplayer, plus one-tap links to
+  real, current eBay sold listings for PSA 10 / PSA 9 / raw prices —
+  no fabricated graded-price guesses.
 - Results screen with a per-category breakdown and a badge per grading
   company.
 - History (Room database) of previously graded cards, stored locally.

@@ -14,15 +14,28 @@ data class CardIdentification(
     val setSeries: String,
     val number: String,
     val printedTotal: Int?,
-    val rarity: String?
+    val rarity: String?,
+    /** Real ungraded ("raw") market price in USD, from TCGplayer via the lookup API -- not an estimate. */
+    val rawPriceUsd: Double?,
+    /** Which printing the price above is for (e.g. "Holofoil", "Normal") -- cards often have several. */
+    val rawPriceVariant: String?
 )
 
 /**
  * Looks a card up against the public Pokemon TCG API (pokemontcg.io) by
  * the name (and, when OCR found one, the set-relative number) read off
- * the photo, to answer "what card/set is this" -- something no amount of
- * on-device image analysis can do, since it's a lookup against real card
- * data rather than something visible in pixel patterns.
+ * the photo, to answer "what card/set is this, and what's it worth
+ * ungraded" -- neither of which any amount of on-device image analysis
+ * can answer, since both are lookups against real card/market data
+ * rather than something visible in pixel patterns.
+ *
+ * Deliberately does NOT attempt to estimate a graded (PSA 10, PSA 9,
+ * etc.) price: there's no free API with real graded sale data behind
+ * this app, and a generic multiplier applied to the raw price would be
+ * fabricated per-card guesswork that varies wildly by card and could
+ * mislead someone actually buying or selling -- see
+ * gradedPriceCheckUrl() for the honest alternative (a link to real,
+ * current sold listings for that exact card and grade).
  *
  * Unlike grading and the OCR name suggestion, this genuinely needs
  * network access every time (it's a live lookup, not a one-time model
@@ -72,6 +85,7 @@ object PokemonCardLookup {
         val card = data.getJSONObject(0)
         val set = card.optJSONObject("set")
         val printedTotal = set?.optInt("printedTotal", -1)?.takeIf { it > 0 }
+        val price = extractRawPrice(card)
 
         return CardIdentification(
             name = card.optString("name").ifBlank { return null },
@@ -79,7 +93,68 @@ object PokemonCardLookup {
             setSeries = set?.optString("series").orEmpty(),
             number = card.optString("number"),
             printedTotal = printedTotal,
-            rarity = card.optString("rarity").takeIf { it.isNotBlank() }
+            rarity = card.optString("rarity").takeIf { it.isNotBlank() },
+            rawPriceUsd = price?.first,
+            rawPriceVariant = price?.second
         )
+    }
+
+    // Checked in this order: the variants most Pokemon cards actually use,
+    // most-common-and-most-collected first. Whichever is present first
+    // (with a usable price) wins; anything else found is a last-resort
+    // fallback so we still show a price for oddball printings.
+    private val preferredVariants = listOf(
+        "holofoil", "reverseHolofoil", "normal",
+        "1stEditionHolofoil", "1stEditionNormal", "unlimitedHolofoil", "unlimited"
+    )
+
+    private fun extractRawPrice(card: JSONObject): Pair<Double, String>? {
+        val prices = card.optJSONObject("tcgplayer")?.optJSONObject("prices") ?: return null
+
+        for (variant in preferredVariants) {
+            prices.optJSONObject(variant)?.let { priceForVariant(it) }?.let { return it to variantLabel(variant) }
+        }
+        val keys = prices.keys()
+        while (keys.hasNext()) {
+            val variant = keys.next()
+            prices.optJSONObject(variant)?.let { priceForVariant(it) }?.let { return it to variantLabel(variant) }
+        }
+        return null
+    }
+
+    private fun priceForVariant(variantPrices: JSONObject): Double? {
+        val market = variantPrices.optDouble("market", Double.NaN)
+        if (!market.isNaN() && market > 0) return market
+        val mid = variantPrices.optDouble("mid", Double.NaN)
+        if (!mid.isNaN() && mid > 0) return mid
+        return null
+    }
+
+    private fun variantLabel(variant: String): String = when (variant) {
+        "normal" -> "Normal"
+        "holofoil" -> "Holofoil"
+        "reverseHolofoil" -> "Reverse Holofoil"
+        "1stEditionHolofoil" -> "1st Edition Holofoil"
+        "1stEditionNormal" -> "1st Edition Normal"
+        "unlimitedHolofoil" -> "Unlimited Holofoil"
+        "unlimited" -> "Unlimited"
+        else -> variant.replaceFirstChar { it.uppercase() }
+    }
+
+    /**
+     * A link to real, current eBay sold/completed listings for this exact
+     * card and grade -- the honest alternative to guessing a graded price:
+     * no API key needed, and it's genuine market data rather than a
+     * generic multiplier applied to the raw price.
+     */
+    fun gradedPriceCheckUrl(card: CardIdentification, gradeLabel: String): String {
+        val terms = listOfNotNull(
+            card.name,
+            card.setName.takeIf { it.isNotBlank() },
+            card.number.takeIf { it.isNotBlank() },
+            gradeLabel
+        ).joinToString(" ")
+        val encoded = URLEncoder.encode(terms, "UTF-8")
+        return "https://www.ebay.com/sch/i.html?_nkw=$encoded&LH_Sold=1&LH_Complete=1"
     }
 }
